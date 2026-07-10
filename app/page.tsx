@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   cargarTodo,
   Datos,
+  ETIQUETA_MR,
   ETIQUETA_SITUACION,
   NOMBRE_PROGRAMA,
+  ORDEN_MR,
   ORDEN_SITUACION,
 } from '@/lib/api';
 import {
@@ -25,14 +27,15 @@ type Tab = 'Resumen' | 'Cursos' | 'Historial' | 'Emprendimiento' | 'Demografía'
 
 const COHORTE_ACTUAL = '2026';
 
-// Emprendimiento y Demografía provienen de la BD de monitorias JC de la cohorte
-// actual; el Historial (serie diaria) también arranca en la cohorte 2026.
+// Emprendimiento (encuesta diagnóstico) es solo JC; Demografía existe para ambos
+// programas con fuentes distintas (JC: BD monitorias · MR: BD-Mujeres ROFÉ, vista
+// v_mr_demografia). El Historial (serie diaria) arranca en la cohorte 2026.
 // Cohortes pasadas (2023-2025, importadas de Q10): Resumen + Cursos.
 function tabsDisponibles(programa: Programa, cohorte: string): Tab[] {
   if (cohorte !== COHORTE_ACTUAL) return ['Resumen', 'Cursos'];
   return programa === 'jc'
     ? ['Resumen', 'Cursos', 'Historial', 'Emprendimiento', 'Demografía']
-    : ['Resumen', 'Cursos', 'Historial'];
+    : ['Resumen', 'Cursos', 'Historial', 'Demografía'];
 }
 
 const COLOR_SITUACION: Record<string, string> = {
@@ -166,6 +169,17 @@ export default function Pagina() {
         </div>
       </>
     );
+
+  // v_mr_demografia (formato largo) → filas de una dimensión, con etiqueta y orden fijo
+  const dimensionMr = (dim: string) => {
+    const filas = datos.mrDemografia.filter((d) => d.dimension === dim);
+    const orden = ORDEN_MR[dim];
+    if (orden) filas.sort((a, b) => orden.indexOf(a.categoria) - orden.indexOf(b.categoria));
+    return filas.map((d) => ({ ...d, etiqueta: ETIQUETA_MR[d.categoria] ?? d.categoria }));
+  };
+  const totalMrConDatos = datos.mrDemografia
+    .filter((d) => d.dimension === 'emprendimiento')
+    .reduce((s, d) => s + d.total, 0);
 
   const emprendimientoOrdenado = ORDEN_SITUACION.map((s) => ({
     nombre: ETIQUETA_SITUACION[s],
@@ -349,6 +363,71 @@ export default function Pagina() {
             </p>
           </Seccion>
         </div>
+      )}
+
+      {tab === 'Demografía' && programa === 'mr' && (
+        <>
+          <p className="text-xs text-slate-400 mb-4">
+            Fuente: BD-Mujeres ROFÉ — {totalMrConDatos} mujeres con datos sociodemográficos
+            (cubre el 99% de la cohorte 2026; solo agregados, nunca datos individuales).
+          </p>
+          <div className="grid md:grid-cols-2 gap-6">
+            <Seccion titulo="Estado civil">
+              <GraficoEmprendimiento
+                datos={dimensionMr('estado_civil').map((d, i) => ({
+                  nombre: d.etiqueta,
+                  total: d.total,
+                  color: [C.naranja, C.azul2, C.verde, C.amarillo, C.rojo][i % 5],
+                }))}
+              />
+            </Seccion>
+            <Seccion titulo="Nivel de estudios">
+              <GraficoBarras
+                datos={dimensionMr('nivel_estudio')}
+                dataKey="total"
+                nombre="Mujeres"
+                color={C.azul2}
+              />
+            </Seccion>
+            <Seccion titulo="Tipo de vivienda">
+              <GraficoEmprendimiento
+                datos={dimensionMr('tipo_vivienda').map((d, i) => ({
+                  nombre: d.etiqueta,
+                  total: d.total,
+                  color: [C.azul2, C.amarillo, C.verde][i % 3],
+                }))}
+              />
+            </Seccion>
+            <Seccion titulo="Estrato socioeconómico">
+              <GraficoBarras
+                datos={dimensionMr('estrato').map((d) => ({ ...d, etiqueta: `Estrato ${d.etiqueta}` }))}
+                dataKey="total"
+                nombre="Mujeres"
+                color={C.verde}
+              />
+            </Seccion>
+            <Seccion titulo="Distribución de edad" nota="En rangos — nunca edades individuales.">
+              <GraficoBarras
+                datos={dimensionMr('edad_rango')}
+                dataKey="total"
+                nombre="Mujeres"
+                color={C.naranja}
+              />
+            </Seccion>
+            <Seccion
+              titulo="Emprendimiento"
+              nota="Con emprendimiento = registra un emprendimiento con nombre en la BD."
+            >
+              <GraficoEmprendimiento
+                datos={dimensionMr('emprendimiento').map((d) => ({
+                  nombre: d.etiqueta,
+                  total: d.total,
+                  color: d.categoria === 'con_emprendimiento' ? C.verde : C.amarillo,
+                }))}
+              />
+            </Seccion>
+          </div>
+        </>
       )}
 
       {tab === 'Demografía' && programa === 'jc' && (

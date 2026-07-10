@@ -84,6 +84,20 @@ export interface EdadDistribucion {
   total: number;
 }
 
+// v_mr_demografia: agregados sociodemográficos de Mujeres ROFÉ (fuente BD-Mujeres ROFÉ).
+// Formato largo: una fila por (dimension, categoria).
+export interface MrDemografia {
+  dimension:
+    | 'estado_civil'
+    | 'nivel_estudio'
+    | 'tipo_vivienda'
+    | 'estrato'
+    | 'edad_rango'
+    | 'emprendimiento';
+  categoria: string;
+  total: number;
+}
+
 export interface Datos {
   cohorte: CohorteStats[];
   cursos: CursoCompletion[];
@@ -93,10 +107,11 @@ export interface Datos {
   edades: EdadDistribucion[];
   programas: ProgramaStats[];
   historial: HistorialCurso[];
+  mrDemografia: MrDemografia[];
 }
 
 export async function cargarTodo(): Promise<Datos> {
-  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial] =
+  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia] =
     await Promise.all([
       leer<CohorteStats>('cohorte_stats'),
       leer<CursoCompletion>('v_curso_completion?order=matriculados.desc'),
@@ -106,8 +121,9 @@ export async function cargarTodo(): Promise<Datos> {
       leer<EdadDistribucion>('v_edad_distribucion?order=orden.asc'),
       leer<ProgramaStats>('v_programa_stats'),
       leer<HistorialCurso>('historial_cursos?order=fecha.asc&limit=5000'),
+      leer<MrDemografia>('v_mr_demografia?order=total.desc'),
     ]);
-  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial };
+  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia };
 }
 
 export const NOMBRE_PROGRAMA: Record<string, string> = {
@@ -123,3 +139,30 @@ export const ETIQUETA_SITUACION: Record<string, string> = {
 };
 
 export const ORDEN_SITUACION = ['en_marcha', 'idea', 'interesado', 'no_interesado'];
+
+// Etiquetas en femenino para las categorías de v_mr_demografia (los enums de la BD
+// son genéricos — soltero, arrendado — pero la población MR es de mujeres).
+export const ETIQUETA_MR: Record<string, string> = {
+  soltero: 'Soltera',
+  casado: 'Casada',
+  'unión_libre': 'Unión libre',
+  divorciado: 'Divorciada/Separada',
+  otro: 'Otro',
+  primaria: 'Primaria',
+  secundaria: 'Bachillerato',
+  'técnico': 'Técnica/Tecnóloga',
+  profesional: 'Profesional',
+  postgrado: 'Postgrado',
+  arrendado: 'Arrendada',
+  familiar: 'Familiar',
+  propia: 'Propia',
+  con_emprendimiento: 'Con emprendimiento',
+  sin_emprendimiento: 'Sin emprendimiento',
+};
+
+// Orden de presentación dentro de cada dimensión (las no listadas van por total desc).
+export const ORDEN_MR: Record<string, string[]> = {
+  nivel_estudio: ['primaria', 'secundaria', 'técnico', 'profesional', 'postgrado'],
+  estrato: ['1', '2', '3', '4', '5', '6'],
+  edad_rango: ['18-25', '26-35', '36-45', '46-60', '60+'],
+};
