@@ -1,0 +1,14 @@
+# Dependencias y builds
+node_modules/
+.next/
+out/
+
+# Entorno (el anon key por defecto está en lib/api.ts — es público por diseño;
+# los overrides van aquí y nunca a Git)
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db
