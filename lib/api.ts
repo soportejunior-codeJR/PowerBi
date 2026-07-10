@@ -85,6 +85,38 @@ export interface EdadDistribucion {
   total: number;
 }
 
+// cohorte_ingresos: total canónico de ingresados por cohorte × programa (fuente
+// docs/aprobacion/data.json — cohorte completa: activos + retirados, sin perfiles de
+// prueba ni retiros institucionales). JC 2026 = 832.
+export interface CohorteIngresos {
+  cohorte: string;
+  programa: 'jc' | 'mr' | 'stand';
+  ingresados: number;
+  activos: number;
+  retirados: number;
+}
+
+// aprobacion_cursos: avance de la cohorte COMPLETA por curso (cursaron = activos + retirados)
+export interface AprobacionCurso {
+  cohorte: string;
+  curso: string;
+  programa: 'jc' | 'mr' | 'stand' | null;
+  cursaron: number;
+  activos: number;
+  aprobados: number;
+  aprobados_retirados: number;
+  retirados: number;
+  banda_0_25: number | null;
+  banda_26_80: number | null;
+  banda_81_100: number | null;
+  aprobados_total: number | null;
+  no_aprobados: number | null;
+  sin_finalizar: number | null;
+  promedio: string | null;
+  pct_aprobados: string | null;
+  finalizado: boolean | null;
+}
+
 // v_mr_demografia: agregados sociodemográficos de Mujeres ROFÉ (fuente BD-Mujeres ROFÉ).
 // Formato largo: una fila por (dimension, categoria).
 export interface MrDemografia {
@@ -109,10 +141,12 @@ export interface Datos {
   programas: ProgramaStats[];
   historial: HistorialCurso[];
   mrDemografia: MrDemografia[];
+  ingresos: CohorteIngresos[];
+  aprobacion: AprobacionCurso[];
 }
 
 export async function cargarTodo(): Promise<Datos> {
-  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia] =
+  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia, ingresos, aprobacion] =
     await Promise.all([
       leer<CohorteStats>('cohorte_stats'),
       leer<CursoCompletion>('v_curso_completion?order=matriculados.desc'),
@@ -123,8 +157,10 @@ export async function cargarTodo(): Promise<Datos> {
       leer<ProgramaStats>('v_programa_stats'),
       leer<HistorialCurso>('historial_cursos?order=fecha.asc&limit=5000'),
       leer<MrDemografia>('v_mr_demografia?order=total.desc'),
+      leer<CohorteIngresos>('cohorte_ingresos'),
+      leer<AprobacionCurso>('aprobacion_cursos?order=cursaron.desc'),
     ]);
-  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia };
+  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial, mrDemografia, ingresos, aprobacion };
 }
 
 export const NOMBRE_PROGRAMA: Record<string, string> = {
@@ -166,4 +202,17 @@ export const ORDEN_MR: Record<string, string[]> = {
   nivel_estudio: ['primaria', 'secundaria', 'técnico', 'profesional', 'postgrado'],
   estrato: ['1', '2', '3', '4', '5', '6'],
   edad_rango: ['18-25', '26-35', '36-45', '46-60', '60+'],
+};
+
+// Grupos operativos JC (BD de monitorias usa acrónimos) → nombre de ciudad completo
+export const ETIQUETA_GRUPO: Record<string, string> = {
+  BAQ: 'Barranquilla',
+  BOG: 'Bogotá',
+  CAL: 'Cali',
+  CTG: 'Cartagena',
+  MED: 'Medellín',
+  GYL: 'Guayaquil',
+  QTO: 'Quito',
+  PAN: 'Panamá',
+  UY: 'Uruguay',
 };

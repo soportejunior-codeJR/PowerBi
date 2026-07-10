@@ -65,6 +65,40 @@ export function GraficoCursos({
   );
 }
 
+/** Avance de la cohorte COMPLETA por curso (cursaron = activos + retirados).
+ *  Segmentos: aprobó (activo) / en curso / aprobó y se retiró / se retiró sin aprobar. */
+export function GraficoAprobacion({
+  datos,
+}: {
+  datos: {
+    curso: string;
+    aprobados: number;
+    en_curso: number;
+    aprobados_retirados: number;
+    retirados: number;
+  }[];
+}) {
+  const filas = datos.map((d) => ({ ...d, etiqueta: abreviar(d.curso) }));
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(260, filas.length * 44)}>
+      <BarChart data={filas} layout="vertical" margin={{ left: 8, right: 24 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 12 }} />
+        <YAxis type="category" dataKey="etiqueta" width={190} tick={{ fontSize: 11 }} />
+        <Tooltip
+          formatter={(v: number, nombre: string) => [v, nombre]}
+          labelFormatter={(_, payload) => payload?.[0]?.payload?.curso ?? ''}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar dataKey="aprobados" name="Aprobó (>80%)" stackId="a" fill={C.verde} />
+        <Bar dataKey="en_curso" name="En curso" stackId="a" fill={C.amarillo} />
+        <Bar dataKey="aprobados_retirados" name="Aprobó y se retiró" stackId="a" fill={C.azul3} />
+        <Bar dataKey="retirados" name="Se retiró sin aprobar" stackId="a" fill={C.rojo} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 /** Dona de situación de emprendimiento. */
 export function GraficoEmprendimiento({
   datos,
@@ -102,6 +136,7 @@ export function GraficoBarras({
   etiquetaKey = 'etiqueta',
   alto = 280,
   dominioMax,
+  rotarEtiquetas = false,
 }: {
   datos: Record<string, unknown>[];
   dataKey: string;
@@ -110,12 +145,20 @@ export function GraficoBarras({
   etiquetaKey?: string;
   alto?: number;
   dominioMax?: number;
+  rotarEtiquetas?: boolean;
 }) {
   return (
-    <ResponsiveContainer width="100%" height={alto}>
+    <ResponsiveContainer width="100%" height={rotarEtiquetas ? alto + 40 : alto}>
       <BarChart data={datos} margin={{ right: 16 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey={etiquetaKey} tick={{ fontSize: 11 }} interval={0} />
+        <XAxis
+          dataKey={etiquetaKey}
+          tick={{ fontSize: 11 }}
+          interval={0}
+          angle={rotarEtiquetas ? -30 : 0}
+          textAnchor={rotarEtiquetas ? 'end' : 'middle'}
+          height={rotarEtiquetas ? 70 : 30}
+        />
         <YAxis
           tick={{ fontSize: 12 }}
           domain={dominioMax ? [0, dominioMax] : undefined}
@@ -185,10 +228,17 @@ export function GraficoDemografia({
   datos: { grupo_ciudad: string; mujeres: number; hombres: number; otros_genero: number }[];
 }) {
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={340}>
       <BarChart data={datos} margin={{ right: 16 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="grupo_ciudad" tick={{ fontSize: 12 }} />
+        <XAxis
+          dataKey="grupo_ciudad"
+          tick={{ fontSize: 11 }}
+          interval={0}
+          angle={-30}
+          textAnchor="end"
+          height={70}
+        />
         <YAxis tick={{ fontSize: 12 }} />
         <Tooltip />
         <Legend wrapperStyle={{ fontSize: 12 }} />

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   cargarTodo,
   Datos,
+  ETIQUETA_GRUPO,
   ETIQUETA_MR,
   ETIQUETA_SITUACION,
   NOMBRE_PROGRAMA,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/api';
 import {
   C,
+  GraficoAprobacion,
   GraficoBarras,
   GraficoCursos,
   GraficoDemografia,
@@ -25,14 +27,14 @@ import { BackgroundPaths } from '@/components/efectos/BackgroundPaths';
 type Programa = 'jc' | 'mr';
 type Tab = 'Resumen' | 'Cursos' | 'Historial' | 'Emprendimiento' | 'Demografía';
 
-const COHORTE_ACTUAL = '2026';
-
+// La cohorte "actual" NO va hardcodeada: es la mayor presente en los datos, así el
+// cambio de año no requiere tocar el frontend (el ETL escribe la cohorte nueva y listo).
 // Emprendimiento (encuesta diagnóstico) es solo JC; Demografía existe para ambos
 // programas con fuentes distintas (JC: BD monitorias · MR: BD-Mujeres ROFÉ, vista
 // v_mr_demografia). El Historial (serie diaria) arranca en la cohorte 2026.
-// Cohortes pasadas (2023-2025, importadas de Q10): Resumen + Cursos.
-function tabsDisponibles(programa: Programa, cohorte: string): Tab[] {
-  if (cohorte !== COHORTE_ACTUAL) return ['Resumen', 'Cursos'];
+// Cohortes pasadas (importadas de Q10): Resumen + Cursos.
+function tabsDisponibles(programa: Programa, esActual: boolean): Tab[] {
+  if (!esActual) return ['Resumen', 'Cursos'];
   return programa === 'jc'
     ? ['Resumen', 'Cursos', 'Historial', 'Emprendimiento', 'Demografía']
     : ['Resumen', 'Cursos', 'Historial', 'Demografía'];
@@ -81,7 +83,8 @@ export default function Pagina() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [programa, setPrograma] = useState<Programa>('jc');
-  const [cohorte, setCohorte] = useState<string>(COHORTE_ACTUAL);
+  // null = "la cohorte actual" (se resuelve con los datos; no hardcodear el año)
+  const [cohorteElegida, setCohorteElegida] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('Resumen');
 
   useEffect(() => {
@@ -92,9 +95,12 @@ export default function Pagina() {
     () =>
       datos
         ? Array.from(new Set(datos.cursos.map((c) => c.cohorte))).sort().reverse()
-        : [COHORTE_ACTUAL],
+        : [],
     [datos],
   );
+  const cohorteActual = cohortes[0] ?? '';
+  const cohorte = cohorteElegida ?? cohorteActual;
+  const esActual = cohorte === cohorteActual && cohorte !== '';
 
   const cursosProg = useMemo(
     () =>
@@ -109,6 +115,15 @@ export default function Pagina() {
     [datos, programa],
   );
 
+  // Aprobación canónica de la cohorte (cursaron = activos + retirados) por programa
+  const aprobacionProg = useMemo(
+    () =>
+      datos
+        ? datos.aprobacion.filter((a) => a.programa === programa && a.cohorte === cohorte)
+        : [],
+    [datos, programa, cohorte],
+  );
+
   const kpis = useMemo(() => {
     if (!datos) return null;
     const ps = datos.programas.find(
@@ -116,6 +131,8 @@ export default function Pagina() {
     );
     // cohorte_stats viene separada por programa desde la migración de separación JC/MR
     const co = datos.cohorte.find((c) => c.cohorte === cohorte && c.programa === programa);
+    // Ingresados canónicos (cohorte completa: activos + retirados)
+    const ing = datos.ingresos.find((i) => i.cohorte === cohorte && i.programa === programa);
     return {
       participantes: ps?.participantes ?? 0,
       matriculas: ps?.matriculas ?? 0,
@@ -125,21 +142,24 @@ export default function Pagina() {
       promedio: ps?.promedio_avance ? `${ps.promedio_avance}%` : '—',
       edadProm: co?.edad_promedio ? Number(co.edad_promedio).toFixed(1) : '—',
       empMarcha: datos.emprendimiento.find((e) => e.situacion === 'en_marcha')?.total ?? 0,
+      ingresados: ing?.ingresados ?? null,
+      activos: ing?.activos ?? null,
+      retirados: ing?.retirados ?? null,
     };
   }, [datos, programa, cohorte]);
 
-  const ajustarTab = (p: Programa, coh: string) => {
-    if (!tabsDisponibles(p, coh).includes(tab)) setTab('Resumen');
+  const ajustarTab = (p: Programa, actual: boolean) => {
+    if (!tabsDisponibles(p, actual).includes(tab)) setTab('Resumen');
   };
 
   const cambiarPrograma = (p: Programa) => {
     setPrograma(p);
-    ajustarTab(p, cohorte);
+    ajustarTab(p, esActual);
   };
 
   const cambiarCohorte = (coh: string) => {
-    setCohorte(coh);
-    ajustarTab(programa, coh);
+    setCohorteElegida(coh);
+    ajustarTab(programa, coh === cohorteActual);
   };
 
   if (error)
@@ -238,7 +258,7 @@ export default function Pagina() {
         </div>
         {/* Tabs del programa/cohorte activos */}
         <nav className="flex gap-1 tarjeta-glass p-1 flex-wrap">
-          {tabsDisponibles(programa, cohorte).map((t) => (
+          {tabsDisponibles(programa, esActual).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -255,22 +275,30 @@ export default function Pagina() {
       {tab === 'Resumen' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <Kpi
-              titulo={`Participantes ${NOMBRE_PROGRAMA[programa]}`}
-              valor={String(kpis.participantes)}
-              detalle={
-                cohorte === COHORTE_ACTUAL
-                  ? `Activos en la cohorte ${cohorte}`
-                  : `Cohorte ${cohorte} (histórico Q10 — no incluye retirados)`
-              }
-            />
+            {esActual && kpis.ingresados !== null ? (
+              <Kpi
+                titulo={`Ingresados ${NOMBRE_PROGRAMA[programa]}`}
+                valor={String(kpis.ingresados)}
+                detalle={`Cohorte ${cohorte} completa: ${kpis.activos} activos + ${kpis.retirados} retirados (sin perfiles de prueba ni retiros institucionales)`}
+              />
+            ) : (
+              <Kpi
+                titulo={`Participantes ${NOMBRE_PROGRAMA[programa]}`}
+                valor={String(kpis.participantes)}
+                detalle={
+                  esActual
+                    ? `Activos en la cohorte ${cohorte}`
+                    : `Cohorte ${cohorte} (histórico Q10 — no incluye retirados)`
+                }
+              />
+            )}
             <Kpi
               titulo="Matrículas"
               valor={String(kpis.matriculas)}
               detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`}
             />
             <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Sobre todas las matrículas" />
-            {cohorte === COHORTE_ACTUAL && kpis.edadProm !== '—' ? (
+            {esActual && kpis.edadProm !== '—' ? (
               <Kpi titulo="Edad promedio" valor={kpis.edadProm} detalle="Participantes con dato demográfico" />
             ) : (
               <Kpi
@@ -280,16 +308,91 @@ export default function Pagina() {
               />
             )}
           </div>
+          {esActual && aprobacionProg.length > 0 ? (
+            <Seccion
+              titulo={`Avance de la cohorte por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
+              nota={`Cada barra suma la cohorte completa que cursó (${kpis.ingresados ?? '—'} ingresados en los cursos base): aprobó = avance > 80%; quien aprobó antes de retirarse conserva su logro.`}
+            >
+              <GraficoAprobacion
+                datos={aprobacionProg.map((a) => ({
+                  curso: a.curso,
+                  aprobados: a.aprobados,
+                  en_curso: (a.banda_0_25 ?? 0) + (a.banda_26_80 ?? 0),
+                  aprobados_retirados: a.aprobados_retirados,
+                  retirados: a.retirados,
+                }))}
+              />
+            </Seccion>
+          ) : (
+            <Seccion
+              titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
+              nota="Completado = avance > 80% (mismo criterio del panel de aprobación)."
+            >
+              <GraficoCursos datos={cursosProg} />
+            </Seccion>
+          )}
+        </>
+      )}
+
+      {tab === 'Cursos' && esActual && aprobacionProg.length > 0 && (
+        <>
           <Seccion
-            titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
-            nota="Completado = avance > 80% (mismo criterio del panel de aprobación)."
+            titulo={`Avance de la cohorte por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
+            nota={`Cada barra suma la cohorte completa que cursó: aprobó = avance > 80%; quien aprobó antes de retirarse conserva su logro.`}
           >
-            <GraficoCursos datos={cursosProg} />
+            <GraficoAprobacion
+              datos={aprobacionProg.map((a) => ({
+                curso: a.curso,
+                aprobados: a.aprobados,
+                en_curso: (a.banda_0_25 ?? 0) + (a.banda_26_80 ?? 0),
+                aprobados_retirados: a.aprobados_retirados,
+                retirados: a.retirados,
+              }))}
+            />
+          </Seccion>
+          <Seccion titulo="Detalle por curso (cohorte completa)">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200">
+                    <th className="py-2 pr-4">Curso</th>
+                    <th className="py-2 pr-4 text-right">Cursaron</th>
+                    <th className="py-2 pr-4 text-right">Aprobaron</th>
+                    <th className="py-2 pr-4 text-right">En curso</th>
+                    <th className="py-2 pr-4 text-right">Retirados sin aprobar</th>
+                    <th className="py-2 pr-4 text-right">% Aprobados</th>
+                    <th className="py-2 text-right">Avance promedio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aprobacionProg.map((a) => (
+                    <tr key={a.curso} className="border-b border-slate-100">
+                      <td className="py-2 pr-4">{a.curso}</td>
+                      <td className="py-2 pr-4 text-right">{a.cursaron}</td>
+                      <td className="py-2 pr-4 text-right">
+                        {a.aprobados_total ?? a.aprobados + a.aprobados_retirados}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {(a.banda_0_25 ?? 0) + (a.banda_26_80 ?? 0)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">{a.retirados}</td>
+                      <td className="py-2 pr-4 text-right font-medium">{a.pct_aprobados ?? '—'}%</td>
+                      <td className="py-2 text-right">{a.promedio ?? '—'}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Aprobaron incluye a quienes superaron el 80% antes de retirarse. Fuente: panel de
+              aprobación (definición canónica de la cohorte, sin perfiles de prueba ni retiros
+              institucionales).
+            </p>
           </Seccion>
         </>
       )}
 
-      {tab === 'Cursos' && (
+      {tab === 'Cursos' && !(esActual && aprobacionProg.length > 0) && (
         <>
           <Seccion titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`} nota="Completado = avance > 80%.">
             <GraficoCursos datos={cursosProg} />
@@ -436,14 +539,23 @@ export default function Pagina() {
           <div className="grid md:grid-cols-2 gap-6">
             <Seccion titulo="Participantes por grupo" nota="Grupos operativos por ciudad — Jóvenes creaTIvos.">
               <GraficoBarras
-                datos={datos.demografia.map((d) => ({ etiqueta: d.grupo_ciudad, total: d.total }))}
+                datos={datos.demografia.map((d) => ({
+                  etiqueta: ETIQUETA_GRUPO[d.grupo_ciudad] ?? d.grupo_ciudad,
+                  total: d.total,
+                }))}
                 dataKey="total"
                 nombre="Participantes"
                 color={C.azul2}
+                rotarEtiquetas
               />
             </Seccion>
             <Seccion titulo="Género por grupo">
-              <GraficoDemografia datos={datos.demografia} />
+              <GraficoDemografia
+                datos={datos.demografia.map((d) => ({
+                  ...d,
+                  grupo_ciudad: ETIQUETA_GRUPO[d.grupo_ciudad] ?? d.grupo_ciudad,
+                }))}
+              />
             </Seccion>
           </div>
           <Seccion titulo="Distribución de edad" nota="En rangos — nunca edades individuales.">
