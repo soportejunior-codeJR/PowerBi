@@ -48,10 +48,16 @@ digitales. Densidad ≤ 110 partículas; nunca sobre contenido de datos.
 Curvas SVG en azul de marca fluyendo tras el contenido (fixed, -z-10, opacidad total
 ≤ 0.6). Uso: fondo de secciones de datos. Jamás detrás de texto pequeño con opacidad alta.
 
-### 4.3 Botón metal líquido (`LiquidMetalButton`)
-CTA principal: fondo azul profundo, borde cónico giratorio (azul marca → azul sec. →
-amarillo) + barrido de brillo. **Solo un CTA primario por vista** — es el elemento de
-máxima jerarquía. Secundarios: pills planas existentes.
+### 4.3 Botón metal líquido (`LiquidMetalButton`) y pills metálicas (`.pill-metal`)
+Dos niveles de jerarquía metálica:
+- **CTA completo** (`LiquidMetalButton`): fondo azul profundo, borde cónico giratorio
+  (azul marca → azul sec. → amarillo) + barrido de brillo. **Solo un CTA primario por
+  vista** — máxima jerarquía.
+- **Metal suave** (`.pill-metal` + variante de color): estado ACTIVO de selectores —
+  gradiente metálico en el color del grupo (azul=JC, naranja=MR, verde=cohorte,
+  oscuro=tabs) + barrido de brillo desincronizado entre grupos (animation-delay).
+  Sin borde giratorio: los selectores informan, no gritan. Los estados inactivos
+  permanecen planos.
 
 ### 4.4 Tarjetas glass (`.tarjeta-glass`)
 `bg-white/75 + backdrop-blur + borde blanco/60 + sombra azulada suave`. Contenedor

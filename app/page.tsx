@@ -196,8 +196,8 @@ export default function Pagina() {
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
                 programa === p
                   ? p === 'mr'
-                    ? 'bg-rofe-naranja text-white'
-                    : 'bg-rofe-azul text-white'
+                    ? 'pill-metal pill-metal-naranja'
+                    : 'pill-metal pill-metal-azul'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -213,7 +213,7 @@ export default function Pagina() {
               onClick={() => cambiarCohorte(coh)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 cohorte === coh
-                  ? 'bg-rofe-verde text-white'
+                  ? 'pill-metal pill-metal-verde'
                   : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -228,7 +228,7 @@ export default function Pagina() {
               key={t}
               onClick={() => setTab(t)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === t ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+                tab === t ? 'pill-metal pill-metal-oscuro' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               {t}
