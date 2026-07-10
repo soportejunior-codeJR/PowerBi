@@ -6,6 +6,8 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -121,6 +123,57 @@ export function GraficoBarras({
         <Tooltip />
         <Bar dataKey={dataKey} name={nombre} fill={color} radius={[4, 4, 0, 0]} />
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+const PALETA_LINEAS = [C.verde, C.azul2, C.naranja, C.rojo, C.amarillo, C.azul3, '#8a6fbc'];
+
+/** Serie de tiempo multi-curso: una línea por curso (matriculados o promedio). */
+export function GraficoHistorial({
+  historial,
+  metrica,
+  nombreMetrica,
+}: {
+  historial: { fecha: string; curso: string; valor: number | null }[];
+  metrica: string;
+  nombreMetrica: string;
+}) {
+  // pivot: [{fecha, "Curso A": v, "Curso B": v, ...}]
+  const cursos = Array.from(new Set(historial.map((h) => h.curso)));
+  const porFecha = new Map<string, Record<string, number | string | null>>();
+  for (const h of historial) {
+    if (!porFecha.has(h.fecha)) porFecha.set(h.fecha, { fecha: h.fecha });
+    porFecha.get(h.fecha)![abreviar(h.curso, 22)] = h.valor;
+  }
+  const filas = Array.from(porFecha.values()).sort((a, b) =>
+    String(a.fecha).localeCompare(String(b.fecha)),
+  );
+  return (
+    <ResponsiveContainer width="100%" height={360}>
+      <LineChart data={filas} margin={{ right: 24 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis
+          dataKey="fecha"
+          tick={{ fontSize: 11 }}
+          tickFormatter={(f: string) => f.slice(5)}
+        />
+        <YAxis tick={{ fontSize: 12 }} />
+        <Tooltip />
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {cursos.map((c, i) => (
+          <Line
+            key={c}
+            type="monotone"
+            dataKey={abreviar(c, 22)}
+            name={abreviar(c, 30)}
+            stroke={PALETA_LINEAS[i % PALETA_LINEAS.length]}
+            strokeWidth={2}
+            dot={{ r: 2 }}
+            connectNulls
+          />
+        ))}
+      </LineChart>
     </ResponsiveContainer>
   );
 }

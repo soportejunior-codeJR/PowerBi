@@ -5,6 +5,7 @@ import {
   cargarTodo,
   Datos,
   ETIQUETA_SITUACION,
+  NOMBRE_PROGRAMA,
   ORDEN_SITUACION,
 } from '@/lib/api';
 import {
@@ -13,10 +14,18 @@ import {
   GraficoCursos,
   GraficoDemografia,
   GraficoEmprendimiento,
+  GraficoHistorial,
 } from '@/components/graficos';
 
-const TABS = ['Resumen', 'Cursos', 'Emprendimiento', 'Demografía'] as const;
-type Tab = (typeof TABS)[number];
+type Programa = 'jc' | 'mr';
+type Tab = 'Resumen' | 'Cursos' | 'Historial' | 'Emprendimiento' | 'Demografía';
+
+// Emprendimiento y Demografía provienen de la BD de monitorias de Jóvenes creaTIvos
+// — solo aplican al programa JC (los datos de Mujeres ROFÉ viven en otra fuente).
+const TABS_POR_PROGRAMA: Record<Programa, Tab[]> = {
+  jc: ['Resumen', 'Cursos', 'Historial', 'Emprendimiento', 'Demografía'],
+  mr: ['Resumen', 'Cursos', 'Historial'],
+};
 
 const COLOR_SITUACION: Record<string, string> = {
   en_marcha: C.verde,
@@ -48,27 +57,43 @@ function Seccion({ titulo, nota, children }: { titulo: string; nota?: string; ch
 export default function Pagina() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [programa, setPrograma] = useState<Programa>('jc');
   const [tab, setTab] = useState<Tab>('Resumen');
 
   useEffect(() => {
     cargarTodo().then(setDatos).catch((e) => setError(String(e)));
   }, []);
 
+  const cursosProg = useMemo(
+    () => (datos ? datos.cursos.filter((c) => c.programa === programa) : []),
+    [datos, programa],
+  );
+
+  const historialProg = useMemo(
+    () => (datos ? datos.historial.filter((h) => h.programa === programa) : []),
+    [datos, programa],
+  );
+
   const kpis = useMemo(() => {
     if (!datos) return null;
+    const ps = datos.programas.find((p) => p.programa === programa);
     const co = datos.cohorte[0];
-    const matriculas = datos.cursos.reduce((s, c) => s + c.matriculados, 0);
-    const completadas = datos.cursos.reduce((s, c) => s + c.completados, 0);
-    const emp = datos.emprendimiento.find((e) => e.situacion === 'en_marcha')?.total ?? 0;
     return {
-      participantes: co?.total_participantes ?? 0,
-      cohorte: co?.cohorte ?? '—',
-      matriculas,
-      pctCompletadas: matriculas ? Math.round((100 * completadas) / matriculas) : 0,
+      participantes: ps?.participantes ?? 0,
+      matriculas: ps?.matriculas ?? 0,
+      pctCompletadas: ps?.matriculas
+        ? Math.round((100 * ps.completadas) / ps.matriculas)
+        : 0,
+      promedio: ps?.promedio_avance ? `${ps.promedio_avance}%` : '—',
       edadProm: co?.edad_promedio ? Number(co.edad_promedio).toFixed(1) : '—',
-      empMarcha: emp,
+      empMarcha: datos.emprendimiento.find((e) => e.situacion === 'en_marcha')?.total ?? 0,
     };
-  }, [datos]);
+  }, [datos, programa]);
+
+  const cambiarPrograma = (p: Programa) => {
+    setPrograma(p);
+    if (!TABS_POR_PROGRAMA[p].includes(tab)) setTab('Resumen');
+  };
 
   if (error)
     return (
@@ -91,62 +116,90 @@ export default function Pagina() {
       </div>
     );
 
-  const emprendimientoOrdenado = ORDEN_SITUACION.map((s) => {
-    const fila = datos.emprendimiento.find((e) => e.situacion === s);
-    return {
-      nombre: ETIQUETA_SITUACION[s],
-      total: fila?.total ?? 0,
-      color: COLOR_SITUACION[s],
-    };
-  });
+  const emprendimientoOrdenado = ORDEN_SITUACION.map((s) => ({
+    nombre: ETIQUETA_SITUACION[s],
+    total: datos.emprendimiento.find((e) => e.situacion === s)?.total ?? 0,
+    color: COLOR_SITUACION[s],
+  }));
 
   const empVsCursos = ORDEN_SITUACION.map((s) => {
     const fila = datos.empVsCursos.find((e) => e.situacion === s);
     return {
       etiqueta: ETIQUETA_SITUACION[s].replace('Emprendimiento ', '').replace('Tiene una ', ''),
       cursos: fila ? Number(fila.prom_cursos_completados) : 0,
-      participantes: fila?.participantes ?? 0,
     };
   });
 
   return (
     <div>
-      {/* Tabs */}
-      <nav className="flex gap-1 mb-6 bg-white rounded-xl border border-slate-200 p-1 w-fit">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t ? 'bg-rofe-azul text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </nav>
+      {/* Selector de programa */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1">
+          {(['jc', 'mr'] as Programa[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => cambiarPrograma(p)}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                programa === p
+                  ? p === 'mr'
+                    ? 'bg-rofe-naranja text-white'
+                    : 'bg-rofe-azul text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {NOMBRE_PROGRAMA[p]}
+            </button>
+          ))}
+        </div>
+        {/* Tabs del programa activo */}
+        <nav className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 flex-wrap">
+          {TABS_POR_PROGRAMA[programa].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                tab === t ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {tab === 'Resumen' && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <Kpi titulo={`Participantes ${kpis.cohorte}`} valor={String(kpis.participantes)} detalle="Cohorte activa (JC + Mujeres ROFÉ)" />
-            <Kpi titulo="Matrículas" valor={String(kpis.matriculas)} detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`} />
-            <Kpi titulo="Edad promedio" valor={kpis.edadProm} detalle="Participantes con dato demográfico" />
-            <Kpi titulo="Emprendimientos en marcha" valor={String(kpis.empMarcha)} detalle="Según encuesta de diagnóstico" />
+            <Kpi
+              titulo={`Participantes ${NOMBRE_PROGRAMA[programa]}`}
+              valor={String(kpis.participantes)}
+              detalle="Activos en la cohorte 2026"
+            />
+            <Kpi
+              titulo="Matrículas"
+              valor={String(kpis.matriculas)}
+              detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`}
+            />
+            <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Sobre todas las matrículas" />
+            {programa === 'jc' ? (
+              <Kpi titulo="Edad promedio" valor={kpis.edadProm} detalle="Participantes con dato demográfico" />
+            ) : (
+              <Kpi titulo="Cursos activos" valor={String(cursosProg.length)} detalle="Ruta Mujeres ROFÉ" />
+            )}
           </div>
           <Seccion
-            titulo="Completación por curso"
+            titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]}`}
             nota="Completado = avance > 80% (mismo criterio del panel de aprobación)."
           >
-            <GraficoCursos datos={datos.cursos} />
+            <GraficoCursos datos={cursosProg} />
           </Seccion>
         </>
       )}
 
       {tab === 'Cursos' && (
         <>
-          <Seccion titulo="Completación por curso" nota="Completado = avance > 80%.">
-            <GraficoCursos datos={datos.cursos} />
+          <Seccion titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]}`} nota="Completado = avance > 80%.">
+            <GraficoCursos datos={cursosProg} />
           </Seccion>
           <Seccion titulo="Detalle por curso">
             <div className="overflow-x-auto">
@@ -161,14 +214,12 @@ export default function Pagina() {
                   </tr>
                 </thead>
                 <tbody>
-                  {datos.cursos.map((c) => (
+                  {cursosProg.map((c) => (
                     <tr key={c.curso} className="border-b border-slate-100">
                       <td className="py-2 pr-4">{c.curso}</td>
                       <td className="py-2 pr-4 text-right">{c.matriculados}</td>
                       <td className="py-2 pr-4 text-right">{c.completados}</td>
-                      <td className="py-2 pr-4 text-right font-medium">
-                        {c.pct_completados ?? '—'}%
-                      </td>
+                      <td className="py-2 pr-4 text-right font-medium">{c.pct_completados ?? '—'}%</td>
                       <td className="py-2 text-right">{c.promedio_avance ?? '—'}%</td>
                     </tr>
                   ))}
@@ -179,30 +230,53 @@ export default function Pagina() {
         </>
       )}
 
-      {tab === 'Emprendimiento' && (
+      {tab === 'Historial' && (
         <>
-          <div className="grid md:grid-cols-2 gap-6">
-            <Seccion titulo="Situación frente al emprendimiento" nota="Encuesta de diagnóstico (696 respuestas).">
-              <GraficoEmprendimiento datos={emprendimientoOrdenado} />
-            </Seccion>
-            <Seccion
-              titulo="Cursos completados según situación"
-              nota="Promedio de cursos completados por participante en cada grupo."
-            >
-              <GraficoBarras datos={empVsCursos} dataKey="cursos" nombre="Cursos completados (prom.)" color={C.verde} dominioMax={9} />
-              <p className="text-xs text-slate-400 mt-2">
-                Los cuatro grupos avanzan de forma pareja: tener (o no) un emprendimiento
-                no cambia el ritmo en la ruta de cursos.
-              </p>
-            </Seccion>
-          </div>
+          <Seccion
+            titulo={`Evolución de matrículas — ${NOMBRE_PROGRAMA[programa]}`}
+            nota="Serie diaria desde el 26 de junio (histórico del dashboard + sync diario de Q10). Las matrículas de cursos terminados bajan cuando Q10 archiva estudiantes."
+          >
+            <GraficoHistorial
+              historial={historialProg.map((h) => ({ fecha: h.fecha, curso: h.curso, valor: h.matriculados }))}
+              metrica="matriculados"
+              nombreMetrica="Matriculados"
+            />
+          </Seccion>
+          <Seccion
+            titulo={`Evolución del avance promedio — ${NOMBRE_PROGRAMA[programa]}`}
+            nota="Promedio de avance (%) por curso a lo largo del tiempo."
+          >
+            <GraficoHistorial
+              historial={historialProg.map((h) => ({
+                fecha: h.fecha,
+                curso: h.curso,
+                valor: h.promedio_avance !== null ? Number(h.promedio_avance) : null,
+              }))}
+              metrica="promedio"
+              nombreMetrica="Avance promedio %"
+            />
+          </Seccion>
         </>
       )}
 
-      {tab === 'Demografía' && (
+      {tab === 'Emprendimiento' && programa === 'jc' && (
+        <div className="grid md:grid-cols-2 gap-6">
+          <Seccion titulo="Situación frente al emprendimiento" nota="Encuesta de diagnóstico Jóvenes creaTIvos (696 respuestas).">
+            <GraficoEmprendimiento datos={emprendimientoOrdenado} />
+          </Seccion>
+          <Seccion titulo="Cursos completados según situación" nota="Promedio de cursos completados por participante en cada grupo.">
+            <GraficoBarras datos={empVsCursos} dataKey="cursos" nombre="Cursos completados (prom.)" color={C.verde} dominioMax={9} />
+            <p className="text-xs text-slate-400 mt-2">
+              Los cuatro grupos avanzan de forma pareja: tener (o no) un emprendimiento no cambia el ritmo en la ruta de cursos.
+            </p>
+          </Seccion>
+        </div>
+      )}
+
+      {tab === 'Demografía' && programa === 'jc' && (
         <>
           <div className="grid md:grid-cols-2 gap-6">
-            <Seccion titulo="Participantes por grupo" nota="Grupos operativos por ciudad.">
+            <Seccion titulo="Participantes por grupo" nota="Grupos operativos por ciudad — Jóvenes creaTIvos.">
               <GraficoBarras
                 datos={datos.demografia.map((d) => ({ etiqueta: d.grupo_ciudad, total: d.total }))}
                 dataKey="total"

@@ -35,6 +35,25 @@ export interface CursoCompletion {
   sin_iniciar: number;
   pct_completados: string | null;
   promedio_avance: string | null;
+  programa: 'jc' | 'mr' | 'stand' | null;
+}
+
+export interface ProgramaStats {
+  programa: 'jc' | 'mr' | 'stand';
+  participantes: number;
+  matriculas: number;
+  completadas: number;
+  promedio_avance: string | null;
+}
+
+export interface HistorialCurso {
+  fecha: string;
+  curso: string;
+  programa: 'jc' | 'mr' | 'stand' | null;
+  matriculados: number;
+  promedio_avance: string | null;
+  completados: number | null;
+  fuente: string;
 }
 
 export interface DemografiaGrupo {
@@ -71,10 +90,12 @@ export interface Datos {
   emprendimiento: EmprendimientoSituacion[];
   empVsCursos: EmprendimientoVsCursos[];
   edades: EdadDistribucion[];
+  programas: ProgramaStats[];
+  historial: HistorialCurso[];
 }
 
 export async function cargarTodo(): Promise<Datos> {
-  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades] =
+  const [cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial] =
     await Promise.all([
       leer<CohorteStats>('cohorte_stats'),
       leer<CursoCompletion>('v_curso_completion?order=matriculados.desc'),
@@ -82,9 +103,16 @@ export async function cargarTodo(): Promise<Datos> {
       leer<EmprendimientoSituacion>('v_emprendimiento_situacion'),
       leer<EmprendimientoVsCursos>('v_emprendimiento_vs_cursos'),
       leer<EdadDistribucion>('v_edad_distribucion?order=orden.asc'),
+      leer<ProgramaStats>('v_programa_stats'),
+      leer<HistorialCurso>('historial_cursos?order=fecha.asc&limit=5000'),
     ]);
-  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades };
+  return { cohorte, cursos, demografia, emprendimiento, empVsCursos, edades, programas, historial };
 }
+
+export const NOMBRE_PROGRAMA: Record<string, string> = {
+  jc: 'Jóvenes creaTIvos',
+  mr: 'Mujeres ROFÉ',
+};
 
 export const ETIQUETA_SITUACION: Record<string, string> = {
   en_marcha: 'Emprendimiento en marcha',
