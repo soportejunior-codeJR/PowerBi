@@ -44,6 +44,7 @@ export interface ProgramaStats {
   matriculas: number;
   completadas: number;
   promedio_avance: string | null;
+  cohorte: string;
 }
 
 export interface HistorialCurso {

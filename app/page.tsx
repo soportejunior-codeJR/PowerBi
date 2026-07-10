@@ -20,12 +20,17 @@ import {
 type Programa = 'jc' | 'mr';
 type Tab = 'Resumen' | 'Cursos' | 'Historial' | 'Emprendimiento' | 'Demografía';
 
-// Emprendimiento y Demografía provienen de la BD de monitorias de Jóvenes creaTIvos
-// — solo aplican al programa JC (los datos de Mujeres ROFÉ viven en otra fuente).
-const TABS_POR_PROGRAMA: Record<Programa, Tab[]> = {
-  jc: ['Resumen', 'Cursos', 'Historial', 'Emprendimiento', 'Demografía'],
-  mr: ['Resumen', 'Cursos', 'Historial'],
-};
+const COHORTE_ACTUAL = '2026';
+
+// Emprendimiento y Demografía provienen de la BD de monitorias JC de la cohorte
+// actual; el Historial (serie diaria) también arranca en la cohorte 2026.
+// Cohortes pasadas (2023-2025, importadas de Q10): Resumen + Cursos.
+function tabsDisponibles(programa: Programa, cohorte: string): Tab[] {
+  if (cohorte !== COHORTE_ACTUAL) return ['Resumen', 'Cursos'];
+  return programa === 'jc'
+    ? ['Resumen', 'Cursos', 'Historial', 'Emprendimiento', 'Demografía']
+    : ['Resumen', 'Cursos', 'Historial'];
+}
 
 const COLOR_SITUACION: Record<string, string> = {
   en_marcha: C.verde,
@@ -58,15 +63,27 @@ export default function Pagina() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [programa, setPrograma] = useState<Programa>('jc');
+  const [cohorte, setCohorte] = useState<string>(COHORTE_ACTUAL);
   const [tab, setTab] = useState<Tab>('Resumen');
 
   useEffect(() => {
     cargarTodo().then(setDatos).catch((e) => setError(String(e)));
   }, []);
 
+  const cohortes = useMemo(
+    () =>
+      datos
+        ? Array.from(new Set(datos.cursos.map((c) => c.cohorte))).sort().reverse()
+        : [COHORTE_ACTUAL],
+    [datos],
+  );
+
   const cursosProg = useMemo(
-    () => (datos ? datos.cursos.filter((c) => c.programa === programa) : []),
-    [datos, programa],
+    () =>
+      datos
+        ? datos.cursos.filter((c) => c.programa === programa && c.cohorte === cohorte)
+        : [],
+    [datos, programa, cohorte],
   );
 
   const historialProg = useMemo(
@@ -76,8 +93,10 @@ export default function Pagina() {
 
   const kpis = useMemo(() => {
     if (!datos) return null;
-    const ps = datos.programas.find((p) => p.programa === programa);
-    const co = datos.cohorte[0];
+    const ps = datos.programas.find(
+      (p) => p.programa === programa && p.cohorte === cohorte,
+    );
+    const co = datos.cohorte.find((c) => c.cohorte === cohorte);
     return {
       participantes: ps?.participantes ?? 0,
       matriculas: ps?.matriculas ?? 0,
@@ -88,11 +107,20 @@ export default function Pagina() {
       edadProm: co?.edad_promedio ? Number(co.edad_promedio).toFixed(1) : '—',
       empMarcha: datos.emprendimiento.find((e) => e.situacion === 'en_marcha')?.total ?? 0,
     };
-  }, [datos, programa]);
+  }, [datos, programa, cohorte]);
+
+  const ajustarTab = (p: Programa, coh: string) => {
+    if (!tabsDisponibles(p, coh).includes(tab)) setTab('Resumen');
+  };
 
   const cambiarPrograma = (p: Programa) => {
     setPrograma(p);
-    if (!TABS_POR_PROGRAMA[p].includes(tab)) setTab('Resumen');
+    ajustarTab(p, cohorte);
+  };
+
+  const cambiarCohorte = (coh: string) => {
+    setCohorte(coh);
+    ajustarTab(programa, coh);
   };
 
   if (error)
@@ -151,9 +179,25 @@ export default function Pagina() {
             </button>
           ))}
         </div>
-        {/* Tabs del programa activo */}
+        {/* Selector de cohorte (actual + históricas de Q10) */}
+        <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1">
+          {cohortes.map((coh) => (
+            <button
+              key={coh}
+              onClick={() => cambiarCohorte(coh)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                cohorte === coh
+                  ? 'bg-rofe-verde text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {coh}
+            </button>
+          ))}
+        </div>
+        {/* Tabs del programa/cohorte activos */}
         <nav className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 flex-wrap">
-          {TABS_POR_PROGRAMA[programa].map((t) => (
+          {tabsDisponibles(programa, cohorte).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -173,7 +217,11 @@ export default function Pagina() {
             <Kpi
               titulo={`Participantes ${NOMBRE_PROGRAMA[programa]}`}
               valor={String(kpis.participantes)}
-              detalle="Activos en la cohorte 2026"
+              detalle={
+                cohorte === COHORTE_ACTUAL
+                  ? `Activos en la cohorte ${cohorte}`
+                  : `Cohorte ${cohorte} (histórico Q10 — no incluye retirados)`
+              }
             />
             <Kpi
               titulo="Matrículas"
@@ -181,14 +229,18 @@ export default function Pagina() {
               detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`}
             />
             <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Sobre todas las matrículas" />
-            {programa === 'jc' ? (
+            {programa === 'jc' && cohorte === COHORTE_ACTUAL ? (
               <Kpi titulo="Edad promedio" valor={kpis.edadProm} detalle="Participantes con dato demográfico" />
             ) : (
-              <Kpi titulo="Cursos activos" valor={String(cursosProg.length)} detalle="Ruta Mujeres ROFÉ" />
+              <Kpi
+                titulo="Cursos"
+                valor={String(cursosProg.length)}
+                detalle={`Ruta ${NOMBRE_PROGRAMA[programa]} ${cohorte}`}
+              />
             )}
           </div>
           <Seccion
-            titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]}`}
+            titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
             nota="Completado = avance > 80% (mismo criterio del panel de aprobación)."
           >
             <GraficoCursos datos={cursosProg} />
@@ -198,7 +250,7 @@ export default function Pagina() {
 
       {tab === 'Cursos' && (
         <>
-          <Seccion titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]}`} nota="Completado = avance > 80%.">
+          <Seccion titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`} nota="Completado = avance > 80%.">
             <GraficoCursos datos={cursosProg} />
           </Seccion>
           <Seccion titulo="Detalle por curso">
