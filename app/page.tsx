@@ -166,6 +166,24 @@ export default function Pagina() {
     [datos, programa],
   );
 
+  // Emprendimiento filtrado por ciudad (JC solamente)
+  const emprendimientoPorCiudad = useMemo(
+    () => {
+      if (!datos || programa !== 'jc' || !ciudadElegida) return datos?.emprendimiento ?? [];
+      return datos.emprendimientoPorCiudad?.filter((e) => e.grupo_ciudad === ciudadElegida) ?? [];
+    },
+    [datos, programa, ciudadElegida],
+  );
+
+  // Historial filtrado por ciudad
+  const historialPorCiudad = useMemo(
+    () => {
+      if (!datos || !ciudadElegida) return historialProg;
+      return datos.historialPorCiudad?.filter((h) => h.programa === programa && h.grupo_ciudad === ciudadElegida) ?? [];
+    },
+    [datos, programa, ciudadElegida, historialProg],
+  );
+
   // Aprobación canónica de la cohorte (cursaron = activos + retirados) por programa
   const aprobacionProg = useMemo(
     () =>
@@ -277,11 +295,14 @@ export default function Pagina() {
     .filter((d) => d.dimension === 'emprendimiento')
     .reduce((s, d) => s + d.total, 0);
 
-  const emprendimientoOrdenado = ORDEN_SITUACION.map((s) => ({
-    nombre: ETIQUETA_SITUACION[s],
-    total: datos.emprendimiento.find((e) => e.situacion === s)?.total ?? 0,
-    color: COLOR_SITUACION[s],
-  }));
+  const emprendimientoOrdenado = ORDEN_SITUACION.map((s) => {
+    const empSource = programa === 'jc' && ciudadElegida ? emprendimientoPorCiudad : datos.emprendimiento;
+    return {
+      nombre: ETIQUETA_SITUACION[s],
+      total: empSource.find((e) => e.situacion === s)?.total ?? 0,
+      color: COLOR_SITUACION[s],
+    };
+  });
 
   const empVsCursos = ORDEN_SITUACION.map((s) => {
     const fila = datos.empVsCursos.find((e) => e.situacion === s);
@@ -561,7 +582,7 @@ export default function Pagina() {
             nota="Serie diaria desde el 26 de junio (histórico del dashboard + sync diario de Q10). Las matrículas de cursos terminados bajan cuando Q10 archiva estudiantes."
           >
             <GraficoHistorial
-              historial={historialProg.map((h) => ({ fecha: h.fecha, curso: h.curso, valor: h.matriculados }))}
+              historial={(programa === 'jc' && ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({ fecha: h.fecha, curso: h.curso, valor: Number(h.matriculados ?? 0) }))}
               metrica="matriculados"
               nombreMetrica="Matriculados"
             />
@@ -571,7 +592,7 @@ export default function Pagina() {
             nota="Promedio de avance (%) por curso a lo largo del tiempo."
           >
             <GraficoHistorial
-              historial={historialProg.map((h) => ({
+              historial={(programa === 'jc' && ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({
                 fecha: h.fecha,
                 curso: h.curso,
                 valor: h.promedio_avance !== null ? Number(h.promedio_avance) : null,
