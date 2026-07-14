@@ -135,6 +135,17 @@ export default function Pagina() {
     [datos, programa, ciudadElegida],
   );
 
+  // Cursos filtrados por ciudad (cuando se selecciona una ciudad en JC)
+  const cursosPorCiudadFiltrados = useMemo(
+    () => {
+      if (!datos || programa !== 'jc' || !ciudadElegida) return cursosProg;
+      return datos.cursosPorCiudad?.filter(
+        (c) => c.programa === programa && c.cohorte === cohorte && c.grupo_ciudad === ciudadElegida
+      ) ?? [];
+    },
+    [datos, programa, cohorte, ciudadElegida, cursosProg],
+  );
+
   const historialProg = useMemo(
     () => (datos ? datos.historial.filter((h) => h.programa === programa) : []),
     [datos, programa],
@@ -406,10 +417,19 @@ export default function Pagina() {
             </Seccion>
           ) : (
             <Seccion
-              titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
-              nota="Completado = avance > 80% (mismo criterio del panel de aprobación)."
+              titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}${ciudadElegida ? ` (${ETIQUETA_GRUPO[ciudadElegida]})` : ''}`}
+              nota={ciudadElegida ? `Completado = avance > 80%. Datos filtrados para ${ETIQUETA_GRUPO[ciudadElegida]}.` : "Completado = avance > 80% (mismo criterio del panel de aprobación)."}
             >
-              <GraficoCursos datos={cursosProg} />
+              <GraficoCursos
+                datos={ciudadElegida
+                  ? cursosPorCiudadFiltrados.map((c) => ({
+                      curso: c.curso,
+                      completados: c.completados,
+                      en_progreso: Math.max(0, (c.matriculados ?? 0) - (c.completados ?? 0)),
+                      sin_iniciar: 0,
+                    }))
+                  : cursosProg}
+              />
             </Seccion>
           )}
         </>
@@ -475,8 +495,20 @@ export default function Pagina() {
 
       {tab === 'Cursos' && !(esActual && aprobacionProg.length > 0) && (
         <>
-          <Seccion titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`} nota="Completado = avance > 80%.">
-            <GraficoCursos datos={cursosProg} />
+          <Seccion
+            titulo={`Completación por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}${ciudadElegida ? ` (${ETIQUETA_GRUPO[ciudadElegida]})` : ''}`}
+            nota={ciudadElegida ? `Completado = avance > 80%. Datos filtrados para ${ETIQUETA_GRUPO[ciudadElegida]}.` : "Completado = avance > 80%."}
+          >
+            <GraficoCursos
+              datos={ciudadElegida
+                ? cursosPorCiudadFiltrados.map((c) => ({
+                    curso: c.curso,
+                    completados: c.completados,
+                    en_progreso: Math.max(0, (c.matriculados ?? 0) - (c.completados ?? 0)),
+                    sin_iniciar: 0,
+                  }))
+                : cursosProg}
+            />
           </Seccion>
           <Seccion titulo="Detalle por curso">
             <div className="overflow-x-auto">
@@ -491,7 +523,7 @@ export default function Pagina() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cursosProg.map((c) => (
+                  {(ciudadElegida ? cursosPorCiudadFiltrados : cursosProg).map((c) => (
                     <tr key={c.curso} className="border-b border-slate-100">
                       <td className="py-2 pr-4">{c.curso}</td>
                       <td className="py-2 pr-4 text-right">{c.matriculados}</td>
