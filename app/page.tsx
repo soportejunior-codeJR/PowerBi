@@ -139,24 +139,11 @@ export default function Pagina() {
   const cursosPorCiudadFiltrados = useMemo(
     () => {
       if (!datos || programa !== 'jc' || !ciudadElegida) return cursosProg;
-      const filtrados = datos.cursosPorCiudad?.filter(
-        (c) => c.programa === programa && c.cohorte === cohorte && c.grupo_ciudad === ciudadElegida
-      ) ?? [];
-
-      // Debug: verificar qué se está filtrando
-      if (ciudadElegida) {
-        console.log('🔍 DEBUG cursosPorCiudadFiltrados:', {
-          ciudadElegida,
-          programa,
-          cohorte,
-          datosDisponibles: datos.cursosPorCiudad?.length ?? 0,
-          filtrados: filtrados.length,
-          primerosRegistros: filtrados.slice(0, 2),
-          ciudadesenDatos: Array.from(new Set(datos.cursosPorCiudad?.map((c) => c.grupo_ciudad) ?? [])),
-        });
-      }
-
-      return filtrados;
+      return (
+        datos.cursosPorCiudad?.filter(
+          (c) => c.programa === programa && c.cohorte === cohorte && c.grupo_ciudad === ciudadElegida,
+        ) ?? []
+      );
     },
     [datos, programa, cohorte, ciudadElegida, cursosProg],
   );
@@ -175,13 +162,16 @@ export default function Pagina() {
     [datos, programa, ciudadElegida],
   );
 
-  // Historial filtrado por ciudad
+  // Historial filtrado por ciudad. Serie propia (historial_cursos_ciudad), no el histórico
+  // nacional: este último nunca guardó la dimensión ciudad, así que no se puede desglosar.
   const historialPorCiudad = useMemo(
     () => {
-      if (!datos || !ciudadElegida) return historialProg;
-      return datos.historialPorCiudad?.filter((h) => h.programa === programa && h.grupo_ciudad === ciudadElegida) ?? [];
+      if (!datos || programa !== 'jc' || !ciudadElegida) return [];
+      return (
+        datos.historialPorCiudad?.filter((h) => h.grupo_ciudad === ciudadElegida) ?? []
+      );
     },
-    [datos, programa, ciudadElegida, historialProg],
+    [datos, programa, ciudadElegida],
   );
 
   // Aprobación canónica de la cohorte (cursaron = activos + retirados) por programa
@@ -228,6 +218,11 @@ export default function Pagina() {
       }
     }
 
+    // cohorte_ingresos (la cohorte canónica: activos + retirados) no tiene desglose por
+    // ciudad — el dato de retiros no trae grupo_ciudad. Con una ciudad elegida mostramos
+    // participantes activos de esa ciudad en vez de un total nacional que no aplica.
+    const hayFiltroCiudad = programa === 'jc' && ciudadElegida !== null;
+
     return {
       participantes,
       matriculas,
@@ -235,7 +230,7 @@ export default function Pagina() {
       promedio,
       edadProm,
       empMarcha,
-      ingresados: ing?.ingresados ?? null,
+      ingresados: hayFiltroCiudad ? null : ing?.ingresados ?? null,
       activos: ing?.activos ?? null,
       retirados: ing?.retirados ?? null,
     };
@@ -247,11 +242,14 @@ export default function Pagina() {
 
   const cambiarPrograma = (p: Programa) => {
     setPrograma(p);
+    if (p !== 'jc') setCiudadElegida(null);
     ajustarTab(p, esActual);
   };
 
   const cambiarCohorte = (coh: string) => {
     setCohorteElegida(coh);
+    // Solo la cohorte actual tiene datos de ciudad — no arrastrar el filtro a una pasada.
+    if (coh !== cohorteActual) setCiudadElegida(null);
     ajustarTab(programa, coh === cohorteActual);
   };
 
@@ -356,8 +354,9 @@ export default function Pagina() {
             </button>
           ))}
         </div>
-        {/* Selector de ciudad (solo JC) */}
-        {programa === 'jc' && ciudades.length > 0 && (
+        {/* Selector de ciudad — solo JC y solo cohorte actual: grupo_ciudad viene de la BD de
+            monitorias, que únicamente cubre a los participantes del año en curso. */}
+        {programa === 'jc' && esActual && ciudades.length > 0 && (
           <div className="flex gap-1 tarjeta-glass p-1 flex-wrap">
             <button
               onClick={() => setCiudadElegida(null)}
@@ -411,12 +410,18 @@ export default function Pagina() {
               />
             ) : (
               <Kpi
-                titulo={`Participantes ${NOMBRE_PROGRAMA[programa]}`}
+                titulo={
+                  ciudadElegida
+                    ? `Participantes en ${ETIQUETA_GRUPO[ciudadElegida] ?? ciudadElegida}`
+                    : `Participantes ${NOMBRE_PROGRAMA[programa]}`
+                }
                 valor={String(kpis.participantes)}
                 detalle={
-                  esActual
-                    ? `Activos en la cohorte ${cohorte}`
-                    : `Cohorte ${cohorte} (histórico Q10 — no incluye retirados)`
+                  ciudadElegida
+                    ? `Activos en la cohorte ${cohorte}. La cohorte canónica (ingresados = activos + retirados) no tiene desglose por ciudad.`
+                    : esActual
+                      ? `Activos en la cohorte ${cohorte}`
+                      : `Cohorte ${cohorte} (histórico Q10 — no incluye retirados)`
                 }
               />
             )}
@@ -436,7 +441,10 @@ export default function Pagina() {
               />
             )}
           </div>
-          {esActual && aprobacionProg.length > 0 ? (
+          {/* El desglose de aprobación (aprobados/retirados) sale de aprobacion_cursos, que no
+              trae grupo_ciudad. Con una ciudad elegida caemos al gráfico de completación, que
+              sí está desglosado por ciudad. */}
+          {esActual && aprobacionProg.length > 0 && !ciudadElegida ? (
             <Seccion
               titulo={`Avance de la cohorte por curso — ${NOMBRE_PROGRAMA[programa]} · ${cohorte}`}
               nota={`Cada barra suma la cohorte completa que cursó (${kpis.ingresados ?? '—'} ingresados en los cursos base): aprobó = avance > 80%; quien aprobó antes de retirarse conserva su logro.`}
@@ -578,21 +586,33 @@ export default function Pagina() {
       {tab === 'Historial' && (
         <>
           <Seccion
-            titulo={`Evolución de matrículas — ${NOMBRE_PROGRAMA[programa]}`}
-            nota="Serie diaria desde el 26 de junio (histórico del dashboard + sync diario de Q10). Las matrículas de cursos terminados bajan cuando Q10 archiva estudiantes."
+            titulo={`Evolución de matrículas — ${NOMBRE_PROGRAMA[programa]}${ciudadElegida ? ` · ${ETIQUETA_GRUPO[ciudadElegida] ?? ciudadElegida}` : ''}`}
+            nota={
+              ciudadElegida
+                ? `Serie de ${ETIQUETA_GRUPO[ciudadElegida] ?? ciudadElegida} desde el 14 de julio de 2026, cuando empezamos a guardar el snapshot diario por ciudad. El histórico anterior (desde el 26 de junio) es nacional: nunca guardó la ciudad, así que no se puede desglosar hacia atrás.`
+                : 'Serie diaria desde el 26 de junio (histórico del dashboard + sync diario de Q10). Las matrículas de cursos terminados bajan cuando Q10 archiva estudiantes.'
+            }
           >
             <GraficoHistorial
-              historial={(programa === 'jc' && ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({ fecha: h.fecha, curso: h.curso, valor: Number(h.matriculados ?? 0) }))}
+              historial={(ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({
+                fecha: h.fecha,
+                curso: h.curso,
+                valor: Number(h.matriculados ?? 0),
+              }))}
               metrica="matriculados"
               nombreMetrica="Matriculados"
             />
           </Seccion>
           <Seccion
-            titulo={`Evolución del avance promedio — ${NOMBRE_PROGRAMA[programa]}`}
-            nota="Promedio de avance (%) por curso a lo largo del tiempo."
+            titulo={`Evolución del avance promedio — ${NOMBRE_PROGRAMA[programa]}${ciudadElegida ? ` · ${ETIQUETA_GRUPO[ciudadElegida] ?? ciudadElegida}` : ''}`}
+            nota={
+              ciudadElegida
+                ? `Promedio de avance (%) por curso en ${ETIQUETA_GRUPO[ciudadElegida] ?? ciudadElegida}. La serie por ciudad arranca el 14 de julio de 2026 y crece un punto por día.`
+                : 'Promedio de avance (%) por curso a lo largo del tiempo.'
+            }
           >
             <GraficoHistorial
-              historial={(programa === 'jc' && ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({
+              historial={(ciudadElegida ? historialPorCiudad : historialProg).map((h) => ({
                 fecha: h.fecha,
                 curso: h.curso,
                 valor: h.promedio_avance !== null ? Number(h.promedio_avance) : null,

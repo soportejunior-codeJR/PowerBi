@@ -159,14 +159,16 @@ export interface EmprendimientoPorCiudad {
   total: number;
 }
 
-// Historial cursos por ciudad
+// historial_cursos_ciudad: serie de tiempo por ciudad. Snapshot diario del ETL.
+// Arranca 2026-07-14 — el histórico anterior no tiene dimensión ciudad y no es reconstruible.
 export interface HistorialPorCiudad {
   fecha: string;
   curso: string;
   grupo_ciudad: string;
   programa: 'jc' | 'mr' | 'stand' | null;
+  cohorte: string | null;
   matriculados: number | null;
-  promedio_avance: number | null;
+  promedio_avance: string | number | null;
   completados: number | null;
 }
 
@@ -202,7 +204,7 @@ export async function cargarTodo(): Promise<Datos> {
       leer<EdadDistribucion>('v_edad_distribucion?order=orden.asc'),
       leer<ProgramaStats>('v_programa_stats'),
       leer<HistorialCurso>('historial_cursos?order=fecha.asc&limit=5000'),
-      leer<HistorialPorCiudad>('v_historial_por_ciudad?order=fecha.asc'),
+      leer<HistorialPorCiudad>('historial_cursos_ciudad?order=fecha.asc&limit=5000'),
       leer<MrDemografia>('v_mr_demografia?order=total.desc'),
       leer<CohorteIngresos>('cohorte_ingresos'),
       leer<AprobacionCurso>('aprobacion_cursos?order=cursaron.desc'),
