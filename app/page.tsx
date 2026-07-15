@@ -268,12 +268,16 @@ export default function Pagina() {
     };
   }, [datos]);
 
+  // La evolución grafica el CONTEO de check-ins (completado), no el %. El % pasado no es
+  // reconstruible: el denominador (Real) de cada semana no existe en ninguna fuente, y usar el
+  // Real actual daría >100% en ciudades cuya cohorte encogió. El conteo es fiel (validado contra
+  // Estadísticas para la Semana 16) y arranca en la Semana 1 gracias al backfill de la hoja cruda.
   const participacionEvolucion = useMemo(() => {
     const filas = datos?.emoflowParticipacion ?? [];
     return filas.map((f) => ({
       fecha: f.fecha_corte,
       curso: ETIQUETA_GRUPO[f.grupo_ciudad] ?? f.grupo_ciudad,
-      valor: f.avance_pct != null ? Number(f.avance_pct) : null,
+      valor: f.completado != null ? Number(f.completado) : null,
     }));
   }, [datos]);
 
@@ -1132,14 +1136,12 @@ export default function Pagina() {
               {!ciudadElegida && participacionEvolucion.length > 0 && (
                 <Seccion
                   titulo="Evolución de la participación semanal"
-                  nota={participacionEvolucion.length < 18
-                    ? 'Serie nueva — arrancó el 2026-07-15, crece un punto por ciudad cada día con el sync automático. Se vuelve útil según se acumulan semanas.'
-                    : 'Participación % por ciudad, un punto por día del sync automático.'}
+                  nota='Check-ins registrados por ciudad y semana (Semana 1 en adelante). La última semana es la que está en curso, por eso aparece más baja. Fuente: registro semanal Emoflow.'
                 >
                   <GraficoHistorial
                     historial={participacionEvolucion}
-                    metrica="avance_pct"
-                    nombreMetrica="Participación %"
+                    metrica="completado"
+                    nombreMetrica="Check-ins"
                   />
                 </Seccion>
               )}
