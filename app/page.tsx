@@ -20,7 +20,7 @@ import {
   GraficoEmprendimiento,
   GraficoHistorial,
 } from '@/components/graficos';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Hero } from '@/components/efectos/Hero';
 import { BackgroundPaths } from '@/components/efectos/BackgroundPaths';
 
@@ -62,6 +62,71 @@ function Kpi({ titulo, valor, detalle }: { titulo: string; valor: string; detall
       <p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p>
       <p className="text-3xl font-bold kpi-valor mt-1">{valor}</p>
       {detalle && <p className="text-xs text-slate-400 mt-1">{detalle}</p>}
+    </motion.div>
+  );
+}
+
+// Una fila del panel "Fuentes de datos": qué se muestra, de dónde sale, con qué frescura.
+function FilaFuente(
+  { color, etiqueta, muestra, detalle }:
+  { color: string; etiqueta: string; muestra: string; detalle: string },
+) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-slate-100 last:border-0">
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+        style={{ background: color }}
+      />
+      <div>
+        <p className="text-sm font-semibold text-slate-700">
+          {etiqueta} <span className="font-normal text-slate-400">— {muestra}</span>
+        </p>
+        <p className="text-xs text-slate-400">{detalle}</p>
+      </div>
+    </div>
+  );
+}
+
+// Panel desplegable "Fuentes de datos" — de dónde sale cada bloque del panel. Todo lo que se ve
+// aquí se LEE de Supabase (nunca se consulta Q10 ni Sheets en vivo desde el navegador); la
+// distinción real es de dónde llenó Supabase cada tabla, y qué tan directo es ese camino.
+function PanelFuentes() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.25 }}
+      className="tarjeta-glass p-4 mb-4 overflow-hidden"
+    >
+      <p className="text-xs text-slate-400 mb-3">
+        Este panel solo lee de <strong>Supabase</strong> (nunca consulta Q10 ni Google Sheets en
+        vivo). Lo que cambia es de dónde llenó Supabase cada dato:
+      </p>
+      <FilaFuente
+        color={C.verde}
+        etiqueta="Q10 directo"
+        muestra="Ingresados, Aprobados %, Estado de la cohorte, gráfico de Cursos (cohorte actual)"
+        detalle="export_aprobacion.py entra directo a Q10 (sin pasar por Sheets) → sync diario a Supabase (aprobacion_cursos, cohorte_ingresos). Es el dato más canónico y el mismo que usa el dashboard de GitHub Pages."
+      />
+      <FilaFuente
+        color={C.amarillo}
+        etiqueta="Google Sheet (vía Q10 automatizado)"
+        muestra="Cohortes históricas (2023-2025), vista filtrada por ciudad, Matrículas/Avance fuera de la cohorte actual"
+        detalle="Q10 se vuelca a un Sheet (h2test) por un bot, y de ahí se sincroniza a Supabase. Un paso intermedio más — por eso estas cifras pueden diferir un poco de las de Q10 directo."
+      />
+      <FilaFuente
+        color={C.azul2}
+        etiqueta="Google Sheet (bases sociodemográficas)"
+        muestra="Demografía JC (edad, ciudad, emprendimiento) y Demografía MR (vivienda, estrato, estudios)"
+        detalle="BD de monitorias (JC) y BD-Mujeres ROFÉ (MR) — hojas mantenidas por el equipo, sincronizadas a Supabase de forma manual/periódica, no en el sync diario automático."
+      />
+      <FilaFuente
+        color={C.naranja}
+        etiqueta="Google Sheet (Emoflow)"
+        muestra="Tab Emoflow (ingresos al sistema)"
+        detalle="Pestaña manual +Ingresos-EmoFlow, sincronizada a Supabase en el sync diario (último paso de la cadena n8n)."
+      />
     </motion.div>
   );
 }
@@ -111,6 +176,7 @@ export default function Pagina() {
   const [tab, setTab] = useState<Tab>('Resumen');
   // Unidad del desglose "Estado de la cohorte": matrículas (inscripciones) o estudiantes (personas)
   const [unidadEstado, setUnidadEstado] = useState<'matriculas' | 'estudiantes'>('matriculas');
+  const [mostrarFuentes, setMostrarFuentes] = useState(false);
 
   useEffect(() => {
     cargarTodo().then(setDatos).catch((e) => setError(String(e)));
@@ -543,7 +609,23 @@ export default function Pagina() {
             </button>
           ))}
         </nav>
+        {/* Botón "Fuentes de datos" — visible en todos los tabs, de dónde sale cada cifra */}
+        <button
+          onClick={() => setMostrarFuentes((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors tarjeta-glass ${
+            mostrarFuentes ? 'text-slate-800' : 'text-slate-500 hover:text-slate-700'
+          }`}
+          title="¿De dónde sale la información de este panel?"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+          </svg>
+          Fuentes de datos
+        </button>
       </div>
+
+      <AnimatePresence>{mostrarFuentes && <PanelFuentes />}</AnimatePresence>
 
       {tab === 'Resumen' && (
         <>
