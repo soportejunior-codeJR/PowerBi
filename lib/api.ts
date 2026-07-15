@@ -94,6 +94,7 @@ export interface CohorteIngresos {
   ingresados: number;
   activos: number;
   retirados: number;
+  pct_aprobados?: number | string | null;
 }
 
 // aprobacion_cursos: avance de la cohorte COMPLETA por curso (cursaron = activos + retirados)

@@ -282,6 +282,7 @@ export default function Pagina() {
       matriculas,
       pctCompletadas: matriculas ? Math.round((100 * completadas) / matriculas) : 0,
       promedio,
+      pctAprobados: hayFiltroCiudad ? null : (ing?.pct_aprobados ? `${ing.pct_aprobados}%` : '—'),
       edadProm,
       empMarcha,
       ingresados: hayFiltroCiudad ? null : ing?.ingresados ?? null,
@@ -484,7 +485,10 @@ export default function Pagina() {
               valor={String(kpis.matriculas)}
               detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`}
             />
-            <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Sobre todas las matrículas" />
+            <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Promedio aritmético" />
+            {esActual && kpis.pctAprobados && kpis.pctAprobados !== '—' ? (
+              <Kpi titulo="Aprobados" valor={kpis.pctAprobados} detalle="Avance ≥80% (cohorte completa)" />
+            ) : null}
             {esActual && kpis.edadProm !== '—' ? (
               <Kpi titulo="Edad promedio" valor={kpis.edadProm} detalle="Participantes con dato demográfico" />
             ) : (
