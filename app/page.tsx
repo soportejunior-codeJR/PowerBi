@@ -66,6 +66,25 @@ function Kpi({ titulo, valor, detalle }: { titulo: string; valor: string; detall
   );
 }
 
+// Mini-tarjeta de un estado de la cohorte (aprobadas / en progreso / en riesgo / retiradas).
+// Muestra el conteo, su % sobre el total de matrículas y un punto de color semáforo.
+function EstadoStat(
+  { etiqueta, valor, total, color, detalle }:
+  { etiqueta: string; valor: number; total: number; color: string; detalle: string },
+) {
+  const pct = total ? (100 * valor) / total : 0;
+  return (
+    <div className="rounded-xl border border-slate-200/70 bg-white/40 p-3">
+      <div className="flex items-center gap-2">
+        <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+        <span className="text-xs font-semibold text-slate-600">{etiqueta}</span>
+      </div>
+      <p className="text-2xl font-bold kpi-valor mt-1">{valor.toLocaleString('es-CO')}</p>
+      <p className="text-xs text-slate-400">{pct.toFixed(1)}% · {detalle}</p>
+    </div>
+  );
+}
+
 function Seccion({ titulo, nota, children }: { titulo: string; nota?: string; children: React.ReactNode }) {
   return (
     <motion.section
@@ -282,6 +301,13 @@ export default function Pagina() {
     // por el Sheet h2test (export_aprobacion.py entra directo a Q10). v_programa_stats (derivado
     // de enrollments/Sheets) queda solo para cohortes históricas y para la vista por ciudad,
     // donde no existe alternativa canónica. Así ambos paneles muestran los mismos números.
+    // Desglose de las matrículas de la cohorte en los 4 estados accionables (canónico).
+    // Suman a `cursaron`: aprobadas (>80, incl. retirados que aprobaron) + en progreso (26-80)
+    // + en riesgo (0-25) + retiradas sin aprobar. Útil para decidir dónde intervenir.
+    let estado: null | {
+      aprobadas: number; enProgreso: number; enRiesgo: number; retiradas: number; total: number;
+    } = null;
+
     const esCanonico = esActual && aprobacionProg.length > 0 && !hayFiltroCiudad;
     if (esCanonico) {
       matriculas = aprobacionProg.reduce((s, a) => s + a.cursaron, 0);
@@ -291,6 +317,13 @@ export default function Pagina() {
       // el frontend solo agrega (no re-deriva desde matrículas crudas).
       const sumaPond = aprobacionProg.reduce((s, a) => s + Number(a.promedio ?? 0) * a.cursaron, 0);
       promedio = matriculas ? `${(sumaPond / matriculas).toFixed(1)}%` : promedio;
+      estado = {
+        aprobadas: completadas,
+        enProgreso: aprobacionProg.reduce((s, a) => s + (a.banda_26_80 ?? 0), 0),
+        enRiesgo: aprobacionProg.reduce((s, a) => s + (a.banda_0_25 ?? 0), 0),
+        retiradas: aprobacionProg.reduce((s, a) => s + a.retirados, 0),
+        total: matriculas,
+      };
     }
 
     return {
@@ -301,6 +334,7 @@ export default function Pagina() {
       pctAprobados: hayFiltroCiudad ? null : (ing?.pct_aprobados ? `${ing.pct_aprobados}%` : '—'),
       esCanonico,
       numCursos: aprobacionProg.length,
+      estado,
       edadProm,
       empMarcha,
       ingresados: hayFiltroCiudad ? null : ing?.ingresados ?? null,
@@ -523,6 +557,22 @@ export default function Pagina() {
               />
             )}
           </div>
+          {/* Estado de la cohorte — desglose canónico de las matrículas en los 4 estados
+              accionables (suman a las matrículas totales). Solo cohorte actual sin filtro de
+              ciudad; se auto-adapta a los cursos que existan en aprobacion_cursos. */}
+          {kpis.esCanonico && kpis.estado && (
+            <Seccion
+              titulo="Estado de la cohorte"
+              nota={`Desglose de las ${kpis.estado.total.toLocaleString('es-CO')} matrículas de la cohorte completa (${NOMBRE_PROGRAMA[programa]} · ${cohorte}). Se aprueba con avance > 80%.`}
+            >
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <EstadoStat etiqueta="Aprobadas" valor={kpis.estado.aprobadas} total={kpis.estado.total} color={C.verde} detalle="avance > 80%" />
+                <EstadoStat etiqueta="En progreso" valor={kpis.estado.enProgreso} total={kpis.estado.total} color={C.amarillo} detalle="avance 26–80%" />
+                <EstadoStat etiqueta="En riesgo" valor={kpis.estado.enRiesgo} total={kpis.estado.total} color={C.naranja} detalle="avance 0–25%" />
+                <EstadoStat etiqueta="Retiradas sin aprobar" valor={kpis.estado.retiradas} total={kpis.estado.total} color={C.rojo} detalle="inhabilitadas < 80%" />
+              </div>
+            </Seccion>
+          )}
           {/* El desglose de aprobación (aprobados/retirados) sale de aprobacion_cursos, que no
               trae grupo_ciudad. Con una ciudad elegida caemos al gráfico de completación, que
               sí está desglosado por ciudad. */}
