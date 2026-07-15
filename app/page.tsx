@@ -277,19 +277,37 @@ export default function Pagina() {
     // participantes activos de esa ciudad en vez de un total nacional que no aplica.
     const hayFiltroCiudad = programa === 'jc' && ciudadElegida !== null;
 
+    // Cohorte actual sin filtro de ciudad → TODO el encabezado de cursos sale del canónico
+    // (aprobacion_cursos + cohorte_ingresos): misma fuente que el dashboard GitHub y sin pasar
+    // por el Sheet h2test (export_aprobacion.py entra directo a Q10). v_programa_stats (derivado
+    // de enrollments/Sheets) queda solo para cohortes históricas y para la vista por ciudad,
+    // donde no existe alternativa canónica. Así ambos paneles muestran los mismos números.
+    const esCanonico = esActual && aprobacionProg.length > 0 && !hayFiltroCiudad;
+    if (esCanonico) {
+      matriculas = aprobacionProg.reduce((s, a) => s + a.cursaron, 0);
+      completadas = aprobacionProg.reduce(
+        (s, a) => s + (a.aprobados_total ?? a.aprobados + a.aprobados_retirados), 0);
+      // Avance promedio ponderado por cursaron — los promedios por curso ya son canónicos,
+      // el frontend solo agrega (no re-deriva desde matrículas crudas).
+      const sumaPond = aprobacionProg.reduce((s, a) => s + Number(a.promedio ?? 0) * a.cursaron, 0);
+      promedio = matriculas ? `${(sumaPond / matriculas).toFixed(1)}%` : promedio;
+    }
+
     return {
       participantes,
       matriculas,
       pctCompletadas: matriculas ? Math.round((100 * completadas) / matriculas) : 0,
       promedio,
       pctAprobados: hayFiltroCiudad ? null : (ing?.pct_aprobados ? `${ing.pct_aprobados}%` : '—'),
+      esCanonico,
+      numCursos: aprobacionProg.length,
       edadProm,
       empMarcha,
       ingresados: hayFiltroCiudad ? null : ing?.ingresados ?? null,
       activos: ing?.activos ?? null,
       retirados: ing?.retirados ?? null,
     };
-  }, [datos, programa, cohorte, ciudadElegida, participantesFiltrados]);
+  }, [datos, programa, cohorte, ciudadElegida, participantesFiltrados, esActual, aprobacionProg]);
 
   const ajustarTab = (p: Programa, actual: boolean) => {
     if (!tabsDisponibles(p, actual).includes(tab)) setTab('Resumen');
@@ -483,9 +501,15 @@ export default function Pagina() {
             <Kpi
               titulo="Matrículas"
               valor={String(kpis.matriculas)}
-              detalle={`${kpis.pctCompletadas}% completadas (>80% avance)`}
+              detalle={kpis.esCanonico
+                ? `Inscripciones en ${kpis.numCursos} cursos (cohorte completa)`
+                : `${kpis.pctCompletadas}% completadas (>80% avance)`}
             />
-            <Kpi titulo="Avance promedio" valor={kpis.promedio} detalle="Promedio aritmético" />
+            <Kpi
+              titulo="Avance promedio"
+              valor={kpis.promedio}
+              detalle={kpis.esCanonico ? 'Ponderado por matrículas (cohorte completa)' : 'Promedio aritmético'}
+            />
             {esActual && kpis.pctAprobados && kpis.pctAprobados !== '—' ? (
               <Kpi titulo="Aprobados" valor={kpis.pctAprobados} detalle="Avance ≥80% (cohorte completa)" />
             ) : null}
