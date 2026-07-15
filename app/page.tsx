@@ -109,6 +109,8 @@ export default function Pagina() {
   const [cohorteElegida, setCohorteElegida] = useState<string | null>(null);
   const [ciudadElegida, setCiudadElegida] = useState<Ciudad>(null);
   const [tab, setTab] = useState<Tab>('Resumen');
+  // Unidad del desglose "Estado de la cohorte": matrículas (inscripciones) o estudiantes (personas)
+  const [unidadEstado, setUnidadEstado] = useState<'matriculas' | 'estudiantes'>('matriculas');
 
   useEffect(() => {
     cargarTodo().then(setDatos).catch((e) => setError(String(e)));
@@ -326,6 +328,27 @@ export default function Pagina() {
       };
     }
 
+    // Desglose por ESTUDIANTES (personas únicas) — v_cohorte_estudiantes clasifica a cada
+    // estudiante activo por su avance promedio; los retirados salen de cohorte_ingresos.
+    let estadoEst: null | {
+      alDia: number; enProgreso: number; enRiesgo: number; retirados: number;
+      total: number; promAprobados: number | null;
+    } = null;
+    if (esCanonico) {
+      const ce = datos.estudiantes.find((x) => x.cohorte === cohorte && x.programa === programa);
+      if (ce) {
+        const retirados = ing?.retirados ?? 0;
+        estadoEst = {
+          alDia: ce.al_dia,
+          enProgreso: ce.en_progreso,
+          enRiesgo: ce.en_riesgo,
+          retirados,
+          total: ce.activos + retirados,
+          promAprobados: ce.prom_cursos_aprobados != null ? Number(ce.prom_cursos_aprobados) : null,
+        };
+      }
+    }
+
     return {
       participantes,
       matriculas,
@@ -335,6 +358,7 @@ export default function Pagina() {
       esCanonico,
       numCursos: aprobacionProg.length,
       estado,
+      estadoEst,
       edadProm,
       empMarcha,
       ingresados: hayFiltroCiudad ? null : ing?.ingresados ?? null,
@@ -557,20 +581,57 @@ export default function Pagina() {
               />
             )}
           </div>
-          {/* Estado de la cohorte — desglose canónico de las matrículas en los 4 estados
-              accionables (suman a las matrículas totales). Solo cohorte actual sin filtro de
-              ciudad; se auto-adapta a los cursos que existan en aprobacion_cursos. */}
+          {/* Estado de la cohorte — desglose canónico en 4 estados accionables. Toggle entre
+              MATRÍCULAS (inscripciones, de aprobacion_cursos) y ESTUDIANTES (personas únicas, de
+              v_cohorte_estudiantes). Solo cohorte actual sin filtro de ciudad; auto-adaptable. */}
           {kpis.esCanonico && kpis.estado && (
             <Seccion
               titulo="Estado de la cohorte"
-              nota={`Desglose de las ${kpis.estado.total.toLocaleString('es-CO')} matrículas de la cohorte completa (${NOMBRE_PROGRAMA[programa]} · ${cohorte}). Se aprueba con avance > 80%.`}
+              nota={
+                unidadEstado === 'matriculas'
+                  ? `Desglose de las ${kpis.estado.total.toLocaleString('es-CO')} matrículas (inscripciones) de la cohorte completa — una persona cuenta en cada curso. ${NOMBRE_PROGRAMA[programa]} · ${cohorte}. Se aprueba con avance > 80%.`
+                  : kpis.estadoEst
+                    ? `Desglose de los ${kpis.estadoEst.total.toLocaleString('es-CO')} estudiantes (personas únicas) según su avance promedio en la cohorte. ${NOMBRE_PROGRAMA[programa]} · ${cohorte}. En promedio cada uno ha aprobado ${kpis.estadoEst.promAprobados ?? '—'} cursos.`
+                    : 'Sin datos por estudiante para esta cohorte.'
+              }
             >
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <EstadoStat etiqueta="Aprobadas" valor={kpis.estado.aprobadas} total={kpis.estado.total} color={C.verde} detalle="avance > 80%" />
-                <EstadoStat etiqueta="En progreso" valor={kpis.estado.enProgreso} total={kpis.estado.total} color={C.amarillo} detalle="avance 26–80%" />
-                <EstadoStat etiqueta="En riesgo" valor={kpis.estado.enRiesgo} total={kpis.estado.total} color={C.naranja} detalle="avance 0–25%" />
-                <EstadoStat etiqueta="Retiradas sin aprobar" valor={kpis.estado.retiradas} total={kpis.estado.total} color={C.rojo} detalle="inhabilitadas < 80%" />
+              {/* Toggle matrículas / estudiantes */}
+              <div className="flex gap-1 tarjeta-glass p-1 w-fit mb-4">
+                {([['matriculas', 'Por matrículas'], ['estudiantes', 'Por estudiantes']] as const).map(
+                  ([u, txt]) => (
+                    <button
+                      key={u}
+                      onClick={() => setUnidadEstado(u)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        unidadEstado === u
+                          ? programa === 'mr'
+                            ? 'pill-metal pill-metal-rosa'
+                            : 'pill-metal pill-metal-azul'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {txt}
+                    </button>
+                  ),
+                )}
               </div>
+              {unidadEstado === 'matriculas' ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <EstadoStat etiqueta="Aprobadas" valor={kpis.estado.aprobadas} total={kpis.estado.total} color={C.verde} detalle="avance > 80%" />
+                  <EstadoStat etiqueta="En progreso" valor={kpis.estado.enProgreso} total={kpis.estado.total} color={C.amarillo} detalle="avance 26–80%" />
+                  <EstadoStat etiqueta="En riesgo" valor={kpis.estado.enRiesgo} total={kpis.estado.total} color={C.naranja} detalle="avance 0–25%" />
+                  <EstadoStat etiqueta="Retiradas sin aprobar" valor={kpis.estado.retiradas} total={kpis.estado.total} color={C.rojo} detalle="inhabilitadas < 80%" />
+                </div>
+              ) : kpis.estadoEst ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <EstadoStat etiqueta="Al día" valor={kpis.estadoEst.alDia} total={kpis.estadoEst.total} color={C.verde} detalle="avance prom. > 80%" />
+                  <EstadoStat etiqueta="En progreso" valor={kpis.estadoEst.enProgreso} total={kpis.estadoEst.total} color={C.amarillo} detalle="avance prom. 26–80%" />
+                  <EstadoStat etiqueta="En riesgo" valor={kpis.estadoEst.enRiesgo} total={kpis.estadoEst.total} color={C.naranja} detalle="avance prom. 0–25%" />
+                  <EstadoStat etiqueta="Retirados" valor={kpis.estadoEst.retirados} total={kpis.estadoEst.total} color={C.rojo} detalle="inhabilitados de la cohorte" />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">Sin datos por estudiante para esta cohorte.</p>
+              )}
             </Seccion>
           )}
           {/* El desglose de aprobación (aprobados/retirados) sale de aprobacion_cursos, que no
