@@ -57,10 +57,10 @@ function Kpi({ titulo, valor, detalle }: { titulo: string; valor: string; detall
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ duration: 0.5 }}
-      className="tarjeta-glass p-4"
+      className="tarjeta-glass p-3"
     >
       <p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p>
-      <p className="text-3xl font-bold kpi-valor mt-1">{valor}</p>
+      <p className="text-2xl font-bold kpi-valor mt-1">{valor}</p>
       {detalle && <p className="text-xs text-slate-400 mt-1">{detalle}</p>}
     </motion.div>
   );
@@ -74,12 +74,12 @@ function EstadoStat(
 ) {
   const pct = total ? (100 * valor) / total : 0;
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/40 p-3">
+    <div className="rounded-xl border border-slate-200/70 bg-white/40 p-2.5">
       <div className="flex items-center gap-2">
         <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: color }} />
         <span className="text-xs font-semibold text-slate-600">{etiqueta}</span>
       </div>
-      <p className="text-2xl font-bold kpi-valor mt-1">{valor.toLocaleString('es-CO')}</p>
+      <p className="text-xl font-bold kpi-valor mt-1">{valor.toLocaleString('es-CO')}</p>
       <p className="text-xs text-slate-400">{pct.toFixed(1)}% · {detalle}</p>
     </div>
   );
@@ -92,7 +92,7 @@ function Seccion({ titulo, nota, children }: { titulo: string; nota?: string; ch
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="tarjeta-glass p-5 mb-6"
+      className="tarjeta-glass p-4 mb-5"
     >
       <h2 className="font-bold text-slate-700 mb-1">{titulo}</h2>
       {nota && <p className="text-xs text-slate-400 mb-3">{nota}</p>}
@@ -435,7 +435,7 @@ export default function Pagina() {
     return (
       <>
         <Hero tema={programa} />
-        <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="max-w-[1600px] mx-auto px-4 py-8">
           <div className="bg-rofe-rojo/10 border border-rofe-rojo text-rofe-rojo rounded-xl p-6">
             <p className="font-bold">No se pudieron cargar los datos.</p>
             <p className="text-sm mt-1">{error}</p>
@@ -449,7 +449,7 @@ export default function Pagina() {
     return (
       <>
         <Hero tema={programa} />
-        <div className="max-w-6xl mx-auto px-4 py-8 animate-pulse space-y-4">
+        <div className="max-w-[1600px] mx-auto px-4 py-8 animate-pulse space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="h-24 bg-slate-200 rounded-xl" />
@@ -495,7 +495,7 @@ export default function Pagina() {
       {/* tema-mr activa la paleta naranja de Mujeres ROFÉ en todo el panel */}
       <div
         id="panel"
-        className={`max-w-6xl mx-auto px-4 py-8 scroll-mt-20 ${programa === 'mr' ? 'tema-mr' : ''}`}
+        className={`max-w-[1600px] mx-auto px-4 py-8 scroll-mt-20 ${programa === 'mr' ? 'tema-mr' : ''}`}
       >
       {/* Selector de programa */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -579,7 +579,7 @@ export default function Pagina() {
 
       {tab === 'Resumen' && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-3 mb-5">
             {esActual && kpis.ingresados !== null ? (
               <Kpi
                 titulo={`Ingresados ${NOMBRE_PROGRAMA[programa]}`}
